@@ -1,0 +1,9 @@
+jax
+flax
+optax
+ml-collections
+tensorflow
+tensorflow-datasets
+Pillow
+absl-py
+tensorboard
