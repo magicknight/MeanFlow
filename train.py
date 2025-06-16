@@ -3,6 +3,7 @@ from absl import app, flags
 from ml_collections.config_flags import config_flags
 
 import jax
+import jax.numpy as jnp
 from flax.training import train_state, checkpoints
 import optax
 from tensorboardX import SummaryWriter

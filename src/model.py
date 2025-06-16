@@ -100,12 +100,28 @@ class UNet(nn.Module):
         # Upsampling
         for i, (dim_in, dim_out) in enumerate(zip(dims[::-1][:-1], dims[::-1][1:])):
             is_last = i == (len(dims) - 2)
+
+            # Upsample x first to match the spatial dimensions of the skip connection
+            if not is_last:  # The last upsampling stage might not need a ConvTranspose if already at target resolution
+                # The ConvTranspose should output dim_out channels to match the ResNet and Attention blocks
+                x = nn.ConvTranspose(features=dim_out, kernel_size=(4, 4), strides=(2, 2), padding="SAME")(x)
+            elif dim_in != dim_out:  # If it's the last stage and channels don't match for ResNet/Attention
+                # This handles the case where the final output resolution is achieved without ConvTranspose,
+                # but the channel dimension of x (dim_in) needs to be adjusted to dim_out.
+                x = nn.Conv(features=dim_out, kernel_size=(1, 1), name=f"upsample_last_stage_conv_to_dim_out")(x)
+
             for _ in range(self.num_res_blocks + 1):
-                x = jnp.concatenate([x, skips.pop()], axis=-1)
+                skip_connection = skips.pop()
+                # Now x (potentially upsampled by ConvTranspose or projected by Conv)
+                # and skip_connection should have compatible spatial dimensions.
+                # Their channel dimensions might differ (x has dim_out, skip_connection has dim_out from encoder).
+                x = jnp.concatenate([x, skip_connection], axis=-1)
+                # After concatenation, channels are effectively doubled (dim_out + dim_out from skip).
+                # Project back to dim_out for the ResNet block.
+                x = nn.Conv(features=dim_out, kernel_size=(1, 1), name=f"upsample_concat_conv_block_{i}_{_}")(x)
                 x = ResnetBlock(dim=dim_out)(x, time_emb)
             x = Attention(dim=dim_out)(x)
-            if not is_last:
-                x = nn.ConvTranspose(features=dim_in, kernel_size=(4, 4), strides=(2, 2), padding="SAME")(x)
+            # The ConvTranspose was moved to the beginning of the loop.
 
         # Final layer
         final_conv = nn.Conv(features=self.channels, kernel_size=(1, 1))(x)
